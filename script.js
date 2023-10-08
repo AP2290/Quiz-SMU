@@ -2,6 +2,7 @@ const video = document.getElementById("webcam");
 const liveView = document.getElementById("liveView");
 const demosSection = document.getElementById("demos");
 const enableWebcamButton = document.getElementById("webcamButton");
+const canvasElement = document.querySelector("#output-canvas");
 
 // Check if webcam access is supported.
 function getUserMediaSupported() {
@@ -17,8 +18,21 @@ if (getUserMediaSupported()) {
   console.warn("getUserMedia() is not supported by your browser");
 }
 
+const net = handPoseDetection.SupportedModels.MediaPipeHands;
+const detectorConfig = {
+  runtime: "tfjs",
+};
+
+const state = {
+  backend: "webgl",
+};
+async function loadModel() {
+  // loading webgl backend
+  await tf.setBackend(state.backend);
+  console.log("backend set");
+}
 // Enable the live webcam view and start classification.
-function enableCam(event) {
+async function enableCam(event) {
   // Only continue if the COCO-SSD has finished loading.
   if (!model) {
     return;
@@ -27,39 +41,55 @@ function enableCam(event) {
   // Hide the button once clicked.
   event.target.classList.add("removed");
 
+  loadModel();
   // getUsermedia parameters to force video but not audio.
   const constraints = {
     video: true,
   };
-
   // Activate the webcam stream.
   navigator.mediaDevices.getUserMedia(constraints).then(function (stream) {
     video.srcObject = stream;
+    let { width, height } = stream.getTracks()[0].getSettings();
+    console.log(`${width}x${height}`);
     video.addEventListener("loadeddata", predictWebcam);
   });
 }
 
 // Placeholder function for next step.
-
-const state = {
-  backend: "wasm",
-};
+let detector = undefined;
 async function predictWebcam() {
   console.log("ok");
-  await tf.setBackend(state.backend);
-  console.log("backend set");
   // Load the MediaPipe handpose model.
-  const model = await handpose.load();
-  console.log("has the model been loaded?");
-  console.log(model);
+  if (!detector) {
+    console.log("model loading");
+    detector = await handPoseDetection.createDetector(net, detectorConfig);
+    console.log("model loaded");
+  }
+  const estimationConfig = { flipHorizontal: false };
+  const hands = await detector.estimateHands(video);
+  console.log("hands");
+  if (hands[0]) {
+    canvas.console.log(hands[0].keypoints);
+    console.log("predictions");
+    for (let i = 0; i < hands[0].keypoints.lenght; i++) {
+      console.log(hands[0].keypoints[i]);
+    }
+  }
+
+  // const model = await handpose.load();
+  // console.log(model);
+  // console.log("finger");
+  // hands.forEach((finger) => {
+  //   console.log(finger);
+  // });
 
   // Pass in a video stream (or an image, canvas, or 3D tensor) to obtain a
   // hand prediction from the MediaPipe graph.
-  const predictions = await model.estimateHands(video);
-  console.log(predictions);
+  // const predictions = await model.estimateHands(video);
+  // console.log(predictions);
   console.log("has the predictions been loaded?");
-  console.log(predictions.length);
-  if (predictions.length > 0) {
+  // console.log(predictions.length);
+  if (hands.length > 0) {
     console.log("inside");
     /*
     `predictions` is an array of objects describing each detected hand, for example:
@@ -87,16 +117,21 @@ async function predictWebcam() {
     ]
     */
 
-    for (let i = 0; i < predictions.length; i++) {
-      const keypoints = predictions[i].landmarks;
+    console.log(hands);
+    for (let i = 0; i < hands[0].keypoints.length; i++) {
+      const k = hands[0].keypoints[i].landmarks;
+      console.log(k);
 
       // Log hand keypoints.
-      for (let i = 0; i < keypoints.length; i++) {
-        const [x, y, z] = keypoints[i];
-        console.log(`Keypoint ${i}: [${x}, ${y}, ${z}]`);
-      }
+      // for (let j = 0; j < k.length; j++) {
+      //   const [x, y, z] = k[j];
+      //   console.log(`Keypoint ${j}: [${x}, ${y}, ${z}]`);
+      // }
     }
   }
+  setInterval(() => {
+    predictWebcam();
+  }, 5000);
 }
 
 // Pretend model has loaded so we can try out the webcam code.
